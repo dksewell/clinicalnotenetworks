@@ -82,10 +82,16 @@ create_hcp_hcp_network = function(bp_network,
     }
     return(j_indices)
   }
-  edge_df = 
-    tibble(from = hcp_hcp_adjmat@i + 1, # Index starts at 0
-           to = get_j_indices(hcp_hcp_adjmat@p),
-           weight = hcp_hcp_adjmat@x)
+  edge_df = NULL
+  try({
+    edge_df = 
+      tibble(from = hcp_hcp_adjmat@i + 1, # Index starts at 0
+             to = get_j_indices(hcp_hcp_adjmat@p),
+             weight = hcp_hcp_adjmat@x)
+  },silent = TRUE)
+  if(is.null(edge_df)) edge_df = tibble(from = integer(0),
+                                        to = integer(0))
+  
   
   ## Put them together
   hcp_hcp_network = 
