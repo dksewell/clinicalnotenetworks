@@ -60,6 +60,7 @@ create_bp_network_data = function(pat_id,
                                   site = c("UCDavis",
                                            "UCSD",
                                            "UCLA")[1],
+                                  include_med_students = FALSE,
                                   verbose = TRUE){
   
   #--------------------------------------
@@ -77,10 +78,103 @@ create_bp_network_data = function(pat_id,
     mutate(ACCESS_USER_OBFUS_ID = as.character(ACCESS_USER_OBFUS_ID), # This will help merge with note ids later.
            log_event_number = 1:n()) # This is to help with several operations later
   
+  
   # We will be adding rows (views), so we need to keep track of the
   #   number of rows of alogs.
   max_log_event_number = nrow(alogs)
   to_be_added_to_alogs = alogs[0,] # This creates an empty tibble of the correct form
+  
+  
+  #--------------------------------------
+  # Deal with med students
+  #--------------------------------------
+  if(!include_med_students){
+    # We'll eventually just delete all med students.  This is fine
+    #   for views, but not necessarily modifies.
+    med_student_authored_notes = 
+      alogs %>% 
+      filter(ACCESS_USER_PROV_TYPE == ".STUDENT: MEDICAL",
+             EVENT_ACTION == "Modify")
+    ## If such notes exist, change authorship.
+    if(length(med_student_authored_notes) > 0){
+      for(j in 1:length(med_student_authored_notes)){
+        ### First, check to see if there are any views.  If not,
+        #     this is all moot.
+        note_views = 
+          alogs %>% 
+          filter(NEW_DATA_OBFUS_ID == med_student_authored_notes$NEW_DATA_OBFUS_ID[j],
+                 EVENT_ACTION == "View")
+        
+        if(length(note_views) == 0){
+          
+          #### Delete note if there are no views.
+          alogs %<>%
+            filter(NEW_DATA_OBFUS_ID != med_student_authored_notes$NEW_DATA_OBFUS_ID[j])
+          
+        }else{
+          
+          ### Second, check for an additional modify.
+          second_modify = 
+            alogs %>% 
+            filter(ACCESS_USER_PROV_TYPE != ".STUDENT: MEDICAL",
+                   EVENT_ACTION == "Modify") %>% 
+            select(ACCESS_USER_OBFUS_ID,
+                   ACCESS_USER_PROV_TYPE,
+                   ACCESS_USER_CLINICIAN_TITLE,
+                   ACCESS_USER_PROV_SPECIALTY,
+                   ACCESS_USER_PROVIDER_GENDER)
+          if(length(second_modify) > 0){
+            new_author = 
+              second_modify[1,]
+          }
+          
+          ### If there's not an additional modify, authorship goes to 
+          #     first physician view, else first view if no physician view.
+          if(length(second_modify) == 0){
+            note_views %<>% 
+              mutate(phys_author = grepl("PHYSICIAN",ACCESS_USER_PROV_TYPE))
+            if(any(note_views$phys_author)) note_views %<>% filter(phys_author)
+            new_author = note_views[1,]
+          }
+        
+          ### Now we should have a second author. Replace any medical
+          #     student author fields as second author's.
+          new_author %<>% 
+            select(!contains("NOTE_AUTHOR")) %>% 
+            rename(NOTE_AUTHOR_OBFUS_ID = ACCESS_USER_OBFUS_ID,
+                   NOTE_AUTHOR_PROV_TYPE = ACCESS_USER_PROV_TYPE,
+                   NOTE_AUTHOR_CLINICIAN_TITLE = ACCESS_USER_CLINICIAN_TITLE,
+                   NOTE_AUTHOR_PROV_SPECIALTY = ACCESS_USER_PROV_SPECIALTY,
+                   NOTE_AUTHOR_PROVIDER_GENDER = ACCESS_USER_PROVIDER_GENDER) %>% 
+            select(contains("NOTE_AUTHOR"))
+          for(k in colnames(new_author)){
+            alogs[[k]][which( (alogs$NEW_DATA_OBFUS_ID == med_student_authored_notes$NEW_DATA_OBFUS_ID[j]) & 
+                                (alogs$NOTE_AUTHOR_PROV_TYPE == ".STUDENT: MEDICAL") )] =
+              new_author[[k]]
+          }
+        }
+      }
+    }
+    
+    
+    # OK, now delete all med student actions.
+    alogs %<>%
+      filter(ACCESS_USER_PROV_TYPE != ".STUDENT: MEDICAL")
+    
+    # Save warning if there are still med student authors for an 
+    #   unanticipated reason.
+    if(any(alogs$NOTE_AUTHOR_PROV_TYPE == ".STUDENT: MEDICAL")){
+      danger_zone =
+        tibble(NEW_DATA_OBFUS_ID = unique(alogs$NEW_DATA_OBFUS_ID[which(alogs$NOTE_AUTHOR_PROV_TYPE == ".STUDENT: MEDICAL")]))
+      write_csv(danger_zone,
+                file = paste0("WARNING-still_med_student_authors-PATID-",
+                              alogs$PAT_OBFUS_ID[1],
+                              ".csv"))
+    }
+  }
+  
+  
+  
   
   
   #--------------------------------------
