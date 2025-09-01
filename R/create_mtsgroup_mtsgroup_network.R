@@ -18,22 +18,6 @@
 #' 
 #' @export
 
-
-library(lubridate)
-library(dplyr)
-library(magrittr)
-library(tidygraph)
-library(RSQLite)
-library(DBI)
-pat_id = "10020323371"
-bp_network = 
-  readRDS("E:/R01-SMART_cancer_care/patient_networks/ucdavis/bp_network_data/bp-10020323371.RDS")
-end_time = ymd("2021-07-09")
-inpatient_prop_thresh = 0.75
-db = dbConnect(SQLite(),
-               "E:/R01-SMART_cancer_care/smart_cancer_care.db")
-site = "UCDavis"
-
 create_mtsgroup_mtsgroup_network = function(pat_id,
                                             bp_network,
                                             end_time,
