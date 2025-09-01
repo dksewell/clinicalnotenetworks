@@ -5,6 +5,7 @@
 #' 
 #' @param pat_id character giving the patient id 
 #' @param bp_network tbl_graph object derived from create_bp_network_data()
+#' @param time_before_dx integer.  Number of days prior to date of diagnosis.
 #' @param end_time dttm last date of network construction
 #' @param inpatient_prop_thresh Numeric between 0 and 1.  What proportion of 
 #' access logs should be during an inpatient stay to consider the HCP on an 
@@ -27,14 +28,18 @@ create_mtsgroup_mtsgroup_network = function(pat_id,
                                                      "UCSD",
                                                      "UCLA")[1]){
   
-  #--------------------------------------
-  # Filter nodes by time interval
-  #--------------------------------------
   
-  bp_network %<>% 
-    activate(nodes) %>% 
-    filter(earliest_appearance <= end_time) 
-  
+  #--------------------------------------
+  # Get diagnosis date
+  #--------------------------------------
+  dx_date =
+    db %>% 
+    tbl(paste0("patient_data_",
+               site)) %>% 
+    filter(PAT_OBFUS_ID == pat_id) %>% 
+    collect() %>% 
+    mutate(dx_date = ymd("1970-01-01") + TRUE_DX_DATE) %>% 
+    pull(dx_date)
   
   
   #--------------------------------------
@@ -43,7 +48,18 @@ create_mtsgroup_mtsgroup_network = function(pat_id,
   
   bp_network %<>%
     activate(edges) %>% 
-    filter( date_time <= end_time )
+    filter(date_time <= end_time,
+           date_time >= bl_features$dx_date - time_before_dx)
+  
+  
+  #--------------------------------------
+  # Filter nodes by time interval
+  #--------------------------------------
+  
+  bp_network %<>% 
+    activate(nodes) %>% 
+    filter(earliest_appearance <= end_time) %>% 
+    filter(centrality_degree(mode = "all") > 0) # This is because there may be some HCPs from too far back not involved in patient's cancer care
   
   
   
