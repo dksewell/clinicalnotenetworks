@@ -25,8 +25,7 @@ create_mtsgroup_mtsgroup_network = function(pat_id,
                                             db,
                                             site = c("UCDavis",
                                                      "UCSD",
-                                                     "UCLA")[1],
-){
+                                                     "UCLA")[1]){
   
   #--------------------------------------
   # Filter nodes by time interval

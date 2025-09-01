@@ -2,6 +2,7 @@
 
 export(create_bp_network_data)
 export(create_hcp_hcp_network)
+export(create_mtsgroup_mtsgroup_network)
 import(DBI)
 import(RSQLite)
 import(dplyr)

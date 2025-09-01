@@ -8,6 +8,7 @@ create_bp_network_data(
   pat_id,
   db,
   site = c("UCDavis", "UCSD", "UCLA")[1],
+  include_med_students = FALSE,
   verbose = TRUE
 )
 }
