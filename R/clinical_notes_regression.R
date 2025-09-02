@@ -1,7 +1,8 @@
 #' Clinical notes estimation
 #' 
 #' Estimate the effect of patient features, note importance, and reader 
-#' importance on the outcome of unplanned healthcare utilization.
+#' importance on the outcome of unplanned healthcare utilization.  Use 
+#' future::plan() to parallelize.
 #' 
 #' @param data List of lists.  Each element of the outer list corresponds to 
 #' running feature_extraction() for a patient and specific time window.  It 
@@ -12,7 +13,9 @@
 #' @param phi_boundary_epsilon The optimization of phi will run from 
 #' (eps, 1 - eps).
 #' 
-#' 
+#' @import numDeriv
+#' @import future
+#' @import future.apply
 #' @import holiglm
 #' @export
 
@@ -92,16 +95,16 @@ clinical_notes_regression = function(data,
   }
   
   Z_R = 
-    lapply(data, 
-           helper_term1)
+    future_lapply(data, 
+                  helper_term1)
   q = nrow(Z_R[[1]])
   r = ncol(Z_R[[1]])
   Z_R %<>%
     array(c(q,r,N))
   
   Z_unscaled =
-    lapply(data, 
-           helper_term2) %>% 
+    future_lapply(data, 
+                  helper_term2) %>% 
     unlist() %>% 
     array(c(q,r,N))
   
@@ -110,8 +113,8 @@ clinical_notes_regression = function(data,
   # Extract outcome vector
   #--------------------------------------
   y = 
-    sapply(data,
-           function(X) X[[outcome_variable]])
+    future_sapply(data,
+                  function(X) X[[outcome_variable]])
   
   
   #--------------------------------------
@@ -154,9 +157,9 @@ clinical_notes_regression = function(data,
     
     ## Compute (Z_R - phi Z\ones \ones')\gamma
     mm = 
-      apply(Z_R - phi * Z_unscaled,
-            3,
-            function(x) x %*% gamma) %>% 
+      future_apply(Z_R - phi * Z_unscaled,
+                   3,
+                   function(x) x %*% gamma) %>% 
       t() # Should give Nxq matrix
     
     ## Perform optimization
@@ -172,9 +175,9 @@ clinical_notes_regression = function(data,
     
     ## Compute \beta'(Z_r - \phi Z\ones \ones')
     mm = 
-      apply(Z_R - phi * Z_unscaled,
-            3,
-            function(x) beta %*% x) %>% 
+      future_apply(Z_R - phi * Z_unscaled,
+                   3,
+                   function(x) beta %*% x) %>% 
       t() # Should give Nxr matrix.  And yes, you still need to transpose.
     colnames(mm) = paste("constrained",1:r,sep="_")
     
@@ -200,9 +203,9 @@ clinical_notes_regression = function(data,
     llik_given_alpha_beta_gamma = function(x){
       log_lambda =
         W %*% alpha + 
-        apply(Z_R - x * Z_unscaled,
-              3,
-              function(z) beta %*% z %*% gamma )
+        future_apply(Z_R - x * Z_unscaled,
+                     3,
+                     function(z) beta %*% z %*% gamma )
       dpois(y,
             exp(log_lambda),
             log = TRUE) %>% 
@@ -225,8 +228,85 @@ clinical_notes_regression = function(data,
   }
   
   
+  #--------------------------------------
+  # Get covariance estimate
+  #--------------------------------------
+  
+  # Create helper functions
+  logit = function(x) log(x / (1.0 - x))
+  expit = function(x) 1.0 / (1.0 + exp(-x))
+  
+  # Create log-likelihood function
+  llik = function(x){
+    alpha = x[1:p]
+    beta = x[p + 1:q]
+    transformed_gamma = x[p + q + 1:r]
+    gamma = expit(transformed_gamma)
+    transformed_phi = x[p + q + r + 1]
+    phi = expit(transformed_phi)
+    
+    log_lambda =
+      W %*% alpha + 
+      future_apply(Z_R - phi * Z_unscaled,
+                   3,
+                   function(z) beta %*% z %*% gamma )
+    
+    # Don't forget Jacobian for the prior 
+    #   since we are looking at the Hessian wrt logit(theta) and not theta
+    # \pi(\phi) = 1
+    # Rightarrow \pi(logit(\phi)) = | d \phi / d logit(\phi) |
+    #                             = e^\phi / (1 + e^\phi)^2
+    sum(dpois(y,
+              exp(log_lambda),
+              log = TRUE)) +
+      sum(transformed_gamma) - 
+      2.0 * sum(log(1.0 + exp(transformed_gamma))) +
+      transformed_phi - 
+      2.0 * log(1.0 + exp(transformed_phi))
+  }
+  
+  cov_estimate = NULL
+  try({
+    H = 
+      numDeriv::hessian(llik,
+                        c(alpha,
+                          beta,
+                          logit(gamma),
+                          logit(phi)))
+  },silent = T)
+  try({
+    cov_estimate = 
+      chol2inv(chol(-H))
+  },silent = T)
+  if(is.null(cov_estimate)){
+    try({
+      cov_estimate = 
+        qr.solve(-H)
+    },silent = T)
+  }
+  if(is.null(cov_estimate)){
+    try({
+      cov_estimate = 
+        solve(-H)
+    },silent = T)
+  }
   
   
-  
+  if(is.null(cov_estimate)){
+    warning("Could not invert negative Hessian to get covariance matrix. Returning posterior mode only.")
+    return(list(alpha = alpha,
+                beta = beta,
+                gamma = gamma,
+                phi = phi))
+  }else{
+    object = 
+      list(alpha = alpha,
+           beta = beta,
+           gamma = gamma,
+           phi = phi,
+           covariance = cov_estimate)
+    class(object) = "cnregfit"
+    
+  }
   
 }
