@@ -43,23 +43,36 @@ feature_extraction = function(pat_id,
     mutate(dx_date = ymd("1970-01-01") + TRUE_DX_DATE) %>% 
     mutate(end_time = end_time) %>% 
     # Compute whether treatment has been initiated
-    mutate(surgery = isTRUE(ymd("1899-12-31") + as.integer(SURGERY_FIRST_COURSE_DATE_OF_R) <= end_time),
-           radiation = isTRUE(ymd("1899-12-31") + as.integer(RADIATION_DATE_STARTED_REP_1) <= end_time),
-           chemo = isTRUE(ymd("1899-12-31") + as.integer(RADIATION_DATE_STARTED_REP_1) <= end_time),
-           hormone = isTRUE(ymd("1899-12-31") + as.integer(HORMONE_SUMMARY_DATE_STARTED) <= end_time),
-           immunotherapy = isTRUE(ymd("1899-12-31") + as.integer(IMMUNOTHERAPY_SUMMARY_DATE_STAR) <= end_time)) %>% 
+    mutate(surgery = 
+             factor(isTRUE(ymd("1899-12-30") + as.integer(SURGERY_FIRST_COURSE_DATE_OF_R) <= end_time),
+                    levels = c(T,F)),
+           radiation = 
+             factor(isTRUE(ymd("1899-12-30") + as.integer(RADIATION_DATE_STARTED_REP_1) <= end_time),
+                    levels = c(T,F)),
+           chemo = 
+             factor(isTRUE(ymd("1899-12-30") + as.integer(RADIATION_DATE_STARTED_REP_1) <= end_time),
+                    levels = c(T,F)),
+           hormone = 
+             factor(isTRUE(ymd("1899-12-30") + as.integer(HORMONE_SUMMARY_DATE_STARTED) <= end_time),
+                    levels = c(T,F)),
+           immunotherapy = 
+             factor(isTRUE(ymd("1899-12-30") + as.integer(IMMUNOTHERAPY_SUMMARY_DATE_STAR) <= end_time),
+                    levels = c(T,F))) %>% 
     # Get cancer site and stage
     mutate(cancer_site = 
              case_match(SITE_GROUP,
                         "BREAST" ~ "breast",
                         c("COLON","RECTUM & RECTOSIGMOID") ~ "colon",
-                        "LUNG/BRONCHUS-NON SM CELL" ~ "lung"),
+                        "LUNG/BRONCHUS-NON SM CELL" ~ "lung") %>% 
+             factor(levels = c("breast","colon","lung")),
            cancer_stage = 
-             readr::parse_number(TNM_MIXED_STAGE)) %>% 
+             readr::parse_number(TNM_MIXED_STAGE) %>% 
+             factor(levels = 1:4)) %>% 
     # Get comorbidities
     select(-CANCER_LEUK,-CANCER_LYMPH,-CANCER_METS,-CANCER_NSITU,-CANCER_SOLID) %>% 
     mutate(across(AIDS:WGHTLOSS,
-                  ~ isTRUE(dmy(.x) <= end_time))) %>% 
+                  ~ factor(isTRUE(dmy(.x) <= end_time),
+                           levels = c(T,F)))) %>% 
     # Select all the above (+ demographics)
     select(PAT_OBFUS_ID,
            dx_date,
@@ -222,6 +235,7 @@ feature_extraction = function(pat_id,
   
   
   list(PAT_OBFUS_ID = pat_features$pat_obfus_id,
+       end_time = end_time,
        patient_features = pat_features,
        note_importance = 
          note_importance %>% 
