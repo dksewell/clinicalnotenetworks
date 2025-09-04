@@ -8,21 +8,49 @@
 #' running feature_extraction() for a patient and specific time window.  It 
 #' should also have appended as an element of the list the outcomes named
 #' ed and hospitalization
+#' @param outcome_variable character. Which outcome should be modeled?  "ed" or "hospitalization"
+#' @param method character. Either "normal_approx" or "adaptive_mcmc".
+#' @param mcmc_arguments optional list.  If running adaptive mcmc, supply a list
+#' of arguments that correspond to \code{\link[adaptMCMC]{MCMC}}.
 #' @param epsilon relative tolerance for convergence assessment
 #' @param max_iterations integer.  Maximum number of iterations to run
 #' @param phi_boundary_epsilon The optimization of phi will run from 
 #' (eps, 1 - eps).
 #' 
+#' @return Object of class "cnregfit".  Contains a list with the following:
+#' \itemize{
+#'  \item \code{alpha}: Posterior mode of coefficients for purely patient features
+#'  \item \code{beta}: Posterior mode of coefficients for note importance features
+#'  \item \code{gamma}: Posterior mode of coefficients for MTS group reading importance features. 
+#'  These are bounded between 0 and 1, with higher values indicating more importance.
+#'  \item \code{phi}: Posterior mode of penalty for not reading notes.  Bounded between 
+#'  0 and 1, with higher values indicating a higher penalty.
+#'  \item \code{method}: Which method (normal approximation or MCMC) was used.
+#'  \item \code{covariance}: (If \code{method = normal_approx}) Posterior covariance estimate.  Note that for the 
+#'  bounded variables, this covariance is on the logit scale.
+#'  \item \code{posterior_draws}: (if \code{method = "adaptive_mcmc"}) Object returned from 
+#'  \code{\link[adaptMCMC]{MCMC}}.  Retrieve samples via \code{object$posterior_draws$samples}. 
+#'  Also, you can feed \code{posterior_draws} into \code{\link[adaptMCMC]{MCMC.add.samples}} 
+#'  to obtain more MCMC samples by continuning the MCMC sampler.
+#'  \item \code{error}
+#' }
+#' 
 #' @import numDeriv
 #' @import future
 #' @import future.apply
 #' @import holiglm
+#' @import adaptMCMC
+#' 
 #' @export
+#' @exportClass cnregfit
 
 
 
 clinical_notes_regression = function(data,
                                      outcome_variable = c("ed","hospitalization")[1],
+                                     method = c("normal_approx",
+                                                "adaptive_mcmc")[1],
+                                     mcmc_arguments,
                                      epsilon = 1e-5,
                                      max_iteration = 100,
                                      phi_boundary_epsilon = 1e-2){
@@ -228,8 +256,9 @@ clinical_notes_regression = function(data,
   }
   
   
+  
   #--------------------------------------
-  # Get covariance estimate
+  # Create posterior function 
   #--------------------------------------
   
   # Create helper functions
@@ -237,7 +266,7 @@ clinical_notes_regression = function(data,
   expit = function(x) 1.0 / (1.0 + exp(-x))
   
   # Create log-likelihood function
-  llik = function(x){
+  lpost = function(x){
     alpha = x[1:p]
     beta = x[p + 1:q]
     transformed_gamma = x[p + q + 1:r]
@@ -265,48 +294,134 @@ clinical_notes_regression = function(data,
       2.0 * log(1.0 + exp(transformed_phi))
   }
   
-  cov_estimate = NULL
-  try({
-    H = 
-      numDeriv::hessian(llik,
-                        c(alpha,
-                          beta,
-                          logit(gamma),
-                          logit(phi)))
-  },silent = T)
-  try({
-    cov_estimate = 
-      chol2inv(chol(-H))
-  },silent = T)
-  if(is.null(cov_estimate)){
+  
+  
+  
+  
+  if(method == "normal_approx"){
+    
+    #--------------------------------------
+    # If normal approximation, find covariance matrix
+    #--------------------------------------
+    
+    cov_estimate = NULL
+    try({
+      H = 
+        numDeriv::hessian(lpost,
+                          c(alpha,
+                            beta,
+                            logit(gamma),
+                            logit(phi)))
+    },silent = T)
     try({
       cov_estimate = 
-        qr.solve(-H)
+        chol2inv(chol(-H))
     },silent = T)
-  }
-  if(is.null(cov_estimate)){
-    try({
-      cov_estimate = 
-        solve(-H)
-    },silent = T)
+    if(is.null(cov_estimate)){
+      try({
+        cov_estimate = 
+          qr.solve(-H)
+      },silent = T)
+    }
+    if(is.null(cov_estimate)){
+      try({
+        cov_estimate = 
+          solve(-H)
+      },silent = T)
+    }
+    
+    
+    
+    #--------------------------------------
+    # Create object to return
+    #--------------------------------------
+    
+    if(is.null(cov_estimate)){
+      warning("Could not invert negative Hessian to get covariance matrix. Returning posterior mode only.")
+      
+      object =
+        list(alpha = alpha,
+             beta = beta,
+             gamma = gamma,
+             phi = phi,
+             method = "normal_approx",
+             error = "Error: singular_hessian")
+      
+    }else{
+      
+      object = 
+        list(alpha = alpha,
+             beta = beta,
+             gamma = gamma,
+             phi = phi,
+             covariance = cov_estimate,
+             method = "normal_approx")
+      
+    }
+  
   }
   
   
-  if(is.null(cov_estimate)){
-    warning("Could not invert negative Hessian to get covariance matrix. Returning posterior mode only.")
-    return(list(alpha = alpha,
-                beta = beta,
-                gamma = gamma,
-                phi = phi))
-  }else{
-    object = 
-      list(alpha = alpha,
-           beta = beta,
-           gamma = gamma,
-           phi = phi,
-           covariance = cov_estimate)
-    class(object) = "cnregfit"
+  if(method == "adaptive_mcmc"){
+    
+    #--------------------------------------
+    # Set arguments for adaptMCMC::MCMC if missing
+    #--------------------------------------
+    
+    if(missing(mcmc_arguments)) mcmc_arguments = list()
+    mcmc_arguments$p = lpost
+    mcmc_arguments$init = 
+      c(alpha,
+        beta,
+        logit(gamma),
+        logit(phi))
+    
+    if(is.null(mcmc_arguments$n)) mcmc_arguments$n = 5e3
+    if(is.null(mcmc_arguments$adapt)) mcmc_arguments$adapt = TRUE
+    if(is.null(mcmc_arguments$acc.rate)) mcmc_arguments$acc.rate = 0.234
+    
+    #--------------------------------------
+    # Perform MCMC sampling
+    #--------------------------------------
+    
+    post_samples = NULL
+    try({
+      post_samples = 
+        do.call(adaptMCMC::MCMC,
+                mcmc_arguments)
+    }, silent = TRUE)
+    
+    
+    #--------------------------------------
+    # Create object to return
+    #--------------------------------------
+    
+    if(is.null(post_samples)){
+      
+      object = 
+        list(alpha = alpha,
+             beta = beta,
+             gamma = gamma,
+             phi = phi,
+             method = "adaptive_mcmc",
+             error = "Error: Error in call to adaptMCMC::MCMC()")
+      
+    }else{
+      
+      object = 
+        list(alpha = alpha,
+             beta = beta,
+             gamma = gamma,
+             phi = phi,
+             posterior_draws = post_samples,
+             method = "adaptive_mcmc")
+      
+    }
     
   }
   
+  
+  
+  class(object) = "cnregfit"
+  return(object)
 }
