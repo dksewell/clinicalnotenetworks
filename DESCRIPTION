@@ -11,8 +11,10 @@ RoxygenNote: 7.3.2
 Imports: 
     DBI,
     dplyr,
+    holiglm,
     lubridate,
     magrittr,
+    readr,
     RSQLite,
     tidygraph
 Depends: 

@@ -28,6 +28,8 @@ inpatient team?  Default is 0.75 based on looking at histograms for UCDavis.}
 
 \item{site}{Which site should we pull data for?  Should be
 a character, namely one of "UCDavis", "UCSD", or "UCLA".}
+
+\item{time_before_dx}{integer.  Number of days prior to date of diagnosis.}
 }
 \value{
 A tidygraph object with edge weights reflecting the number

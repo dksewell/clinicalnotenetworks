@@ -6,7 +6,7 @@
 \usage{
 create_hcp_hcp_network(
   bp_network,
-  time_interval = c(mdy("1-1-1900"), mdy("1-1-2100"))
+  time_interval = c(mdy("1899-12-30"), mdy("1-1-2100"))
 )
 }
 \arguments{
