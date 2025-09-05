@@ -7,6 +7,10 @@
 #' @param bp_network tbl_graph object derived from create_bp_network_data()
 #' @param time_before_dx integer.  Number of days prior to date of diagnosis.
 #' @param end_time dttm
+#' @param inpatient_treatment Character.  Either (1) "augment_mts", in which case 
+#' all MTS groups will have an inpatient equivalent, effectively doubling the 
+#' number of MTS groups; or (2) "covariate", in which case inpatient will be 
+#' added as a note-importance covariate
 #' @param inpatient_prop_thresh Numeric between 0 and 1.  What proportion of 
 #' access logs should be during an inpatient stay to consider the HCP on an 
 #' inpatient team?  Default is 0.75 based on looking at histograms for UCDavis.
@@ -22,6 +26,7 @@ feature_extraction = function(pat_id,
                               bp_network,
                               time_before_dx = 30,
                               end_time,
+                              inpatient_treatment = c("augment_mts","covariate")[1],
                               inpatient_prop_thresh = 0.75,
                               db,
                               site = c("UCDavis",
@@ -125,12 +130,15 @@ feature_extraction = function(pat_id,
     select(mts_component_group) %>% 
     distinct() %>% 
     collect()
+  if(inpatient_treatment == "augment_mts"){
+    mts_teams %<>%
+      bind_rows(tibble(mts_component_group = 
+                         paste(mts_teams$mts_component_group,
+                               "inpatient",
+                               sep="_"))
+      )
+  }
   mts_teams %<>%
-    bind_rows(tibble(mts_component_group = 
-                       paste(mts_teams$mts_component_group,
-                             "inpatient",
-                             sep="_"))
-    ) %>% 
     pull(mts_component_group)
   
   # Collect the mts lookup table for the patient
@@ -140,22 +148,41 @@ feature_extraction = function(pat_id,
     filter(PAT_OBFUS_ID == pat_id) %>% 
     collect()
   
-  # Convert inpatient teams
-  lu %<>%
-    mutate(mts_component_group = 
-             ifelse(proportion_logs_inpatient < inpatient_prop_thresh,
-                    mts_component_group,
-                    paste(mts_component_group,"inpatient",sep = "_")))
+  # Convert inpatient teams or add inpatient author covariate
+  if(inpatient_treatment == "augment_mts"){
+    lu %<>%
+      mutate(mts_component_group = 
+               ifelse(proportion_logs_inpatient < inpatient_prop_thresh,
+                      mts_component_group,
+                      paste(mts_component_group,"inpatient",sep = "_")))
+  }
+  if(inpatient_treatment == "covariate"){
+    lu %<>%
+      mutate(inpatient_hcp = 
+               proportion_logs_inpatient < inpatient_prop_thresh)
+  }
   
   # Join them up to node df
-  bp_network %<>%
-    activate(nodes) %>% 
-    left_join(
-      lu %>% 
-        select(ACCESS_USER_OBFUS_ID,
-               mts_component_group),
-      by = join_by(name == ACCESS_USER_OBFUS_ID)
-    )
+  if(inpatient_treatment == "covariate"){
+    bp_network %<>%
+      activate(nodes) %>% 
+      left_join(
+        lu %>% 
+          select(ACCESS_USER_OBFUS_ID,
+                 mts_component_group,
+                 inpatient_hcp),
+        by = join_by(name == ACCESS_USER_OBFUS_ID)
+      )
+  }else{
+    bp_network %<>%
+      activate(nodes) %>% 
+      left_join(
+        lu %>% 
+          select(ACCESS_USER_OBFUS_ID,
+                 mts_component_group),
+        by = join_by(name == ACCESS_USER_OBFUS_ID)
+      )
+  }
   
   # Finally, join them up to edge df
   bp_network %<>%
@@ -177,6 +204,19 @@ feature_extraction = function(pat_id,
       by = join_by(to_name == ACCESS_USER_OBFUS_ID)
     ) %>% 
     select(-from_name,-to_name)
+  if(inpatient_treatment == "covariate"){
+    bp_network %<>%
+      activate(edges) %>% 
+      mutate(from_name = .N()$name[from]) %>% 
+      left_join(
+        lu %>% 
+          select(ACCESS_USER_OBFUS_ID,
+                 inpatient_hcp),
+        by = join_by(from_name == ACCESS_USER_OBFUS_ID)
+      ) %>% 
+      select(-from_name)
+  }
+  
   
   
   #--------------------------------------
@@ -184,29 +224,23 @@ feature_extraction = function(pat_id,
   #--------------------------------------
   
   # Extract time since dx as a covariate
-  note_importance = 
-    bp_network %>% 
-    activate(edges) %>% 
-    filter(EVENT_ACTION == "Modify") %>% 
-    mutate(time_from_dx = as.numeric(as.Date(date_time) - pat_features$dx_date)) %>% 
-    select(time_from_dx,from_mts_component_group) %>% 
-    as.data.frame()
-  
-  # # Match up mts group of author to a new variable, one for each mts group
-  # for(j in mts_teams){
-  #   note_importance %<>%
-  #     mutate(!!j := from_mts_component_group == j)
-  # }
-  # Nevermind, I don't think I want to do it this way, because we'll want to
-  #   construct a design matrix from this using the from_mts_comp._group as
-  #   a factor variable.  We'll also want an intercept.
-  
-  # (Clean up columns via select() later)
-  
-  # NOTE: I've left essentially double the number of MTS groups here on purpose.  
-  #   We can always condense down to the original groups, and add a single 
-  #   variable for inpatient/outpatient designation based on this should we
-  #   wish to later for parsimony.
+  if(inpatient_treatment == "covariate"){
+    note_importance = 
+      bp_network %>% 
+      activate(edges) %>% 
+      filter(EVENT_ACTION == "Modify") %>% 
+      mutate(time_from_dx = as.numeric(as.Date(date_time) - pat_features$dx_date)) %>% 
+      select(time_from_dx,from_mts_component_group,inpatient_hcp) %>% 
+      as.data.frame()
+  }else{
+    note_importance = 
+      bp_network %>% 
+      activate(edges) %>% 
+      filter(EVENT_ACTION == "Modify") %>% 
+      mutate(time_from_dx = as.numeric(as.Date(date_time) - pat_features$dx_date)) %>% 
+      select(time_from_dx,from_mts_component_group) %>% 
+      as.data.frame()
+    }
   
   
   #--------------------------------------
