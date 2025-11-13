@@ -13,7 +13,7 @@
 
 
 create_hcp_hcp_network = function(bp_network,
-                                  time_interval = c(mdy("1899-12-30"),
+                                  time_interval = c(mdy("12-30-1899"),
                                                     mdy("1-1-2100"))){
   
   #--------------------------------------
