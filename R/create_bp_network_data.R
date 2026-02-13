@@ -172,7 +172,7 @@ create_bp_network_data = function(data_pat,
             ACCESS_USER_PROVIDER_GENDER = 
               earliest_modify$ACCESS_USER_PROVIDER_GENDER,
             NOTE_AUTHOR_OBFUS_ID = 
-              earliest_modify$ACCESS_USER_OBFUS_ID
+              earliest_modify$ACCESS_USER_OBFUS_ID,
             NOTE_AUTHOR_PROV_TYPE = 
               earliest_modify$ACCESS_USER_PROV_TYPE,
             NOTE_AUTHOR_CLINICIAN_TITLE = 
@@ -191,25 +191,26 @@ create_bp_network_data = function(data_pat,
             date_time = left_censor_date,
             log_event_number = nrow(alogs) + i,
             PAT_OBFUS_ID = first_entry_is_view$PAT_OBFUS_ID[i],
-            ACCESS_USER_OBFUS_ID = first_entry_is_view$ACCESS_USER_OBFUS_ID,
+            ACCESS_USER_OBFUS_ID = first_entry_is_view$ACCESS_USER_OBFUS_ID[i],
             EVENT_ACTION = "Modify",
-            NEW_DATA_OBFUS_ID = earliest_modify$NEW_DATA_OBFUS_ID,
+            NEW_DATA_OBFUS_ID = 
+              first_entry_is_view$NEW_DATA_OBFUS_ID[i],
             ACCESS_USER_PROV_TYPE = 
-              earliest_modify$ACCESS_USER_PROV_TYPE,
+              first_entry_is_view$NOTE_AUTHOR_PROV_TYPE[i],
             ACCESS_USER_CLINICIAN_TITLE = 
-              earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
+              first_entry_is_view$NOTE_AUTHOR_CLINICIAN_TITLE[i],
             ACCESS_USER_PROV_SPECIALTY = 
-              earliest_modify$ACCESS_USER_PROV_SPECIALTY,
+              first_entry_is_view$NOTE_AUTHOR_PROV_SPECIALTY[i],
             ACCESS_USER_PROVIDER_GENDER = 
-              earliest_modify$ACCESS_USER_PROVIDER_GENDER,
+              first_entry_is_view$NOTE_AUTHOR_PROVIDER_GENDER[i],
             NOTE_AUTHOR_PROV_TYPE = 
-              earliest_modify$ACCESS_USER_PROV_TYPE,
+              first_entry_is_view$NOTE_AUTHOR_PROV_TYPE[i],
             NOTE_AUTHOR_CLINICIAN_TITLE = 
-              earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
+              first_entry_is_view$NOTE_AUTHOR_CLINICIAN_TITLE[i],
             NOTE_AUTHOR_PROV_SPECIALTY = 
-              earliest_modify$ACCESS_USER_PROV_SPECIALTY,
+              first_entry_is_view$NOTE_AUTHOR_PROV_SPECIALTY[i],
             NOTE_AUTHOR_PROVIDER_GENDER = 
-              earliest_modify$ACCESS_USER_PROVIDER_GENDER
+              first_entry_is_view$NOTE_AUTHOR_PROVIDER_GENDER[i]
           )
       }
       
@@ -303,7 +304,7 @@ create_bp_network_data = function(data_pat,
     }#End: Handling med student authorships
     
     # Remove any med student views (authorships will already be 
-    #   overwritten by this point
+    #   overwritten by this point)
     alogs = 
       alogs |> 
       filter(ACCESS_USER_PROV_TYPE != "Medical Student")
@@ -366,7 +367,6 @@ create_bp_network_data = function(data_pat,
     select(ACCESS_USER_OBFUS_ID,
            NEW_DATA_OBFUS_ID,
            EVENT_ACTION,
-           original_note_id,
            date_time) |>
     rename(from = ACCESS_USER_OBFUS_ID,
            to = NEW_DATA_OBFUS_ID)
@@ -380,7 +380,6 @@ create_bp_network_data = function(data_pat,
         select(NEW_DATA_OBFUS_ID,
                ACCESS_USER_OBFUS_ID,
                EVENT_ACTION,
-               original_note_id,
                date_time) |>
         rename(from = NEW_DATA_OBFUS_ID,
                to = ACCESS_USER_OBFUS_ID)
