@@ -84,7 +84,7 @@ create_bp_network_data = function(data_pat,
     arrange(CANCER_DIAGNOSIS_DATE) |> 
     mutate(CANCER_DIAGNOSIS_DATE = as_date(CANCER_DIAGNOSIS_DATE))
   left_censor_date = 
-    data_pat$CANCER_DIAGNOSIS_DATE[1]
+    data_pat$CANCER_DIAGNOSIS_DATE[1] - years(1)
   
   
   #--------------------------------------
@@ -147,41 +147,51 @@ create_bp_network_data = function(data_pat,
         filter(NEW_DATA_OBFUS_ID == first_entry_is_view$NEW_DATA_OBFUS_ID[i])
       
       if(any(this_notes_alogs$EVENT_ACTION == "Modify")){
-        # If there is a modify event, set the earliest modify
-        #   to be the author.
-        
-        earliest_modify = 
-          this_notes_alogs |> 
-          filter(EVENT_ACTION == "Modify") |> 
-          filter(row_number() == 1)
+        # Remove views prior to modify.  We simply don't know who wrote it.
+        rows_to_remove =
+          this_notes_alogs |>
+          filter(cumsum(EVENT_ACTION == "Modify") == 0) |> 
+          pull(log_event_number)
         alogs = 
-          alogs |>
-          add_row(
-            date_time = left_censor_date,
-            log_event_number = nrow(alogs) + i,
-            PAT_OBFUS_ID = earliest_modify$PAT_OBFUS_ID,
-            NEW_DATA_OBFUS_ID = earliest_modify$NEW_DATA_OBFUS_ID,
-            EVENT_ACTION = "Modify",
-            ACCESS_USER_OBFUS_ID = earliest_modify$ACCESS_USER_OBFUS_ID,
-            ACCESS_USER_PROV_TYPE = 
-              earliest_modify$ACCESS_USER_PROV_TYPE,
-            ACCESS_USER_CLINICIAN_TITLE = 
-              earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
-            ACCESS_USER_PROV_SPECIALTY = 
-              earliest_modify$ACCESS_USER_PROV_SPECIALTY,
-            ACCESS_USER_PROVIDER_GENDER = 
-              earliest_modify$ACCESS_USER_PROVIDER_GENDER,
-            NOTE_AUTHOR_OBFUS_ID = 
-              earliest_modify$ACCESS_USER_OBFUS_ID,
-            NOTE_AUTHOR_PROV_TYPE = 
-              earliest_modify$ACCESS_USER_PROV_TYPE,
-            NOTE_AUTHOR_CLINICIAN_TITLE = 
-              earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
-            NOTE_AUTHOR_PROV_SPECIALTY = 
-              earliest_modify$ACCESS_USER_PROV_SPECIALTY,
-            NOTE_AUTHOR_PROVIDER_GENDER = 
-              earliest_modify$ACCESS_USER_PROVIDER_GENDER
-          )
+          alogs |> 
+          filter(!(log_event_number %in% rows_to_remove))
+        
+        # Changed this.  I disagree with this logic.
+        # # If there is a modify event, set the earliest modify
+        # #   to be the author.
+        # 
+        # earliest_modify = 
+        #   this_notes_alogs |> 
+        #   filter(EVENT_ACTION == "Modify") |> 
+        #   filter(row_number() == 1)
+        # alogs = 
+        #   alogs |>
+        #   add_row(
+        #     date_time = left_censor_date,
+        #     log_event_number = nrow(alogs) + i,
+        #     PAT_OBFUS_ID = earliest_modify$PAT_OBFUS_ID,
+        #     NEW_DATA_OBFUS_ID = earliest_modify$NEW_DATA_OBFUS_ID,
+        #     EVENT_ACTION = "Modify",
+        #     ACCESS_USER_OBFUS_ID = earliest_modify$ACCESS_USER_OBFUS_ID,
+        #     ACCESS_USER_PROV_TYPE = 
+        #       earliest_modify$ACCESS_USER_PROV_TYPE,
+        #     ACCESS_USER_CLINICIAN_TITLE = 
+        #       earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
+        #     ACCESS_USER_PROV_SPECIALTY = 
+        #       earliest_modify$ACCESS_USER_PROV_SPECIALTY,
+        #     ACCESS_USER_PROVIDER_GENDER = 
+        #       earliest_modify$ACCESS_USER_PROVIDER_GENDER,
+        #     NOTE_AUTHOR_OBFUS_ID = 
+        #       earliest_modify$ACCESS_USER_OBFUS_ID,
+        #     NOTE_AUTHOR_PROV_TYPE = 
+        #       earliest_modify$ACCESS_USER_PROV_TYPE,
+        #     NOTE_AUTHOR_CLINICIAN_TITLE = 
+        #       earliest_modify$ACCESS_USER_CLINICIAN_TITLE,
+        #     NOTE_AUTHOR_PROV_SPECIALTY = 
+        #       earliest_modify$ACCESS_USER_PROV_SPECIALTY,
+        #     NOTE_AUTHOR_PROVIDER_GENDER = 
+        #       earliest_modify$ACCESS_USER_PROVIDER_GENDER
+        #   )
       }else{
         # If there is not a modify, set the note author as the author
         
@@ -256,13 +266,14 @@ create_bp_network_data = function(data_pat,
           this_notes_alogs = 
             this_notes_alogs |> 
             filter(ACCESS_USER_PROV_TYPE == "Attending Physician")
-        }
-        if(any(this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE %in% 
-               c("MD", "MD, PhD"))){
-          this_notes_alogs = 
-            this_notes_alogs |> 
-            filter(ACCESS_USER_CLINICIAN_TITLE %in% 
-                     c("MD", "MD, PhD"))
+        }else{
+          if(any(this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE %in% 
+                 c("MD", "MD, PhD"))){
+            this_notes_alogs = 
+              this_notes_alogs |> 
+              filter(ACCESS_USER_CLINICIAN_TITLE %in% 
+                       c("MD", "MD, PhD"))
+          }
         }
         
         # If there is a subsequent modify, use that.  Else, use next View
@@ -290,7 +301,7 @@ create_bp_network_data = function(data_pat,
           this_notes_alogs$ACCESS_USER_PROV_SPECIALTY
         alogs$ACCESS_USER_PROVIDER_GENDER[alogs_row_index] = 
           this_notes_alogs$ACCESS_USER_PROVIDER_GENDER
-        # alogs$NOTE_AUTHOR_OBFUS_ID # Don't actually care about these, I don't think.
+        # alogs$NOTE_AUTHOR_OBFUS_ID # I don't think we actually care about these.
         # alogs$NOTE_AUTHOR_PROV_TYPE
         # alogs$NOTE_AUTHOR_CLINICIAN_TITLE
         # alogs$NOTE_AUTHOR_PROV_SPECIALTY
