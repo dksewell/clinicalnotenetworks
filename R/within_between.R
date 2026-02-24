@@ -6,16 +6,16 @@
 #' 2. Information production: Number of notes written by team members
 #' 3. Within-team Information Reach: Number of note reads (excluding re-reading) 
 #' from notes written by other team members
-#' 4. Within-team Information share: Mean/median (over notes) proportion of 
-#' team members who read a note written by someone else on the team
+#' 4. Within-team Information share: Proportion of reads that are actualized
+#' from notes written by someone else on the same team
 #' 5a. Missed opportunities: Number of potential note reads - actual note reads
 #' 5b. Missed opportunities: Number of completely unread notes
 #' 
 #' and for each other team
 #' 6. Between-team Information Reach: Number of note reads (excluding re-reading) 
 #' from notes written by someone on the source team
-#' 7. Between-team Information Share: Mean/median (over notes) proportion of 
-#' team members who read a note written by someone else on the source team
+#' 7. Between-team Information Share: Proportion of reads that are actualized
+#' from notes written by someone else on the source team
 #' 8a. Missed opportunities: Number of potential note reads - actual note reads
 #' 8b. Missed opportunities: Number of completely unread notes
 #' 
@@ -81,21 +81,11 @@ within_between = function(id_pat,
                    "bp_data-",
                    id_pat,
                    ".RDS")) |> 
-    # ### Add mts group # Later comment: I don't think this is necessary...
-    # activate(nodes) |> 
-    # left_join(
-    #   data_mts |> 
-    #     select(ACCESS_USER_OBFUS_ID,
-    #            mts), # No need for PAT_OBFUS_ID, as it has already been filtered to this patient
-    #   by = join_by(name == ACCESS_USER_OBFUS_ID)
-    # ) |> 
-    ### Filter out ones we don't intend to keep
-    mutate(keep = 
-             (type == "note") |
-             (name %in% data_involvement$ACCESS_USER_OBFUS_ID) ) |> 
-    filter(keep) |> 
-    select(-keep)
-  
+    ### Filter out nodes we don't intend to keep
+    activate(nodes) |>
+    filter( (type == "note") |
+              (name %in% data_involvement$ACCESS_USER_OBFUS_ID) )
+    
   ### Create edge df with mts groups assigned
   data_edges = 
     data_bipartite |> 
