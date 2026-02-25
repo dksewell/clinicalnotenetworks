@@ -264,61 +264,68 @@ create_bp_network_data = function(data_pat,
           filter(date_time >= med_student_authored_notes$date_time[j],
                  ACCESS_USER_PROV_TYPE != "Medical Student")
         
-        # If there is a physician involved, only consider those.  Else, look at other prov types.
-        if(any(this_notes_alogs$ACCESS_USER_PROV_TYPE == "Attending Physician")){
-          this_notes_alogs = 
-            this_notes_alogs |> 
-            filter(ACCESS_USER_PROV_TYPE == "Attending Physician")
-        }else{
-          if(any(this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE %in% 
-                 c("MD", "MD, PhD"))){
+        # Only do the following if there are other actions on this note.
+        #   Else, remove this note entirely.
+        if(nrow(this_notes_alogs) > 0){
+        
+          # If there is a physician involved, only consider those.  Else, look at other prov types.
+          if(any(this_notes_alogs$ACCESS_USER_PROV_TYPE == "Attending Physician")){
             this_notes_alogs = 
               this_notes_alogs |> 
-              filter(ACCESS_USER_CLINICIAN_TITLE %in% 
-                       c("MD", "MD, PhD"))
+              filter(ACCESS_USER_PROV_TYPE == "Attending Physician")
+          }else{
+            if(any(this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE %in% 
+                   c("MD", "MD, PhD"))){
+              this_notes_alogs = 
+                this_notes_alogs |> 
+                filter(ACCESS_USER_CLINICIAN_TITLE %in% 
+                         c("MD", "MD, PhD"))
+            }
           }
-        }
-        
-        # If there is a subsequent modify, use that.  Else, use next View
-        if(any(this_notes_alogs$EVENT_ACTION == "Modify")){
+          
+          # If there is a subsequent modify, use that.  Else, use next View
+          if(any(this_notes_alogs$EVENT_ACTION == "Modify")){
+            this_notes_alogs = 
+              this_notes_alogs |> 
+              filter(EVENT_ACTION == "Modify")
+          }
           this_notes_alogs = 
             this_notes_alogs |> 
-            filter(EVENT_ACTION == "Modify")
+            filter(row_number() == 1)
+          
+          # Overwrite authorship information
+          alogs_row_index = 
+            which(alogs$log_event_number ==
+                    med_student_authored_notes$log_event_number[j])
+          
+          alogs$ACCESS_USER_OBFUS_ID[alogs_row_index] = 
+            this_notes_alogs$ACCESS_USER_OBFUS_ID
+          alogs$ACCESS_USER_PROV_TYPE[alogs_row_index] =
+            this_notes_alogs$ACCESS_USER_PROV_TYPE
+          alogs$ACCESS_USER_CLINICIAN_TITLE[alogs_row_index] = 
+            this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE
+          alogs$ACCESS_USER_PROV_SPECIALTY[alogs_row_index] = 
+            this_notes_alogs$ACCESS_USER_PROV_SPECIALTY
+          alogs$ACCESS_USER_PROVIDER_GENDER[alogs_row_index] = 
+            this_notes_alogs$ACCESS_USER_PROVIDER_GENDER
+          # alogs$NOTE_AUTHOR_OBFUS_ID # I don't think we actually care about these.
+          # alogs$NOTE_AUTHOR_PROV_TYPE
+          # alogs$NOTE_AUTHOR_CLINICIAN_TITLE
+          # alogs$NOTE_AUTHOR_PROV_SPECIALTY
+          # alogs$NOTE_AUTHOR_PROVIDER_GENDER
+          
+          # Remove second modify (or view, if there wasn't another modify; we are 
+          #   treating this nearest view as the authoring event).
+          alogs = 
+            alogs[-which(alogs$log_event_number == this_notes_alogs$log_event_number[1]),]
         }
-        this_notes_alogs = 
-          this_notes_alogs |> 
-          filter(row_number() == 1)
-        
-        # Overwrite authorship information
-        alogs_row_index = 
-          which(alogs$log_event_number ==
-                  med_student_authored_notes$log_event_number[j])
-        
-        alogs$ACCESS_USER_OBFUS_ID[alogs_row_index] = 
-          this_notes_alogs$ACCESS_USER_OBFUS_ID
-        alogs$ACCESS_USER_PROV_TYPE[alogs_row_index] =
-          this_notes_alogs$ACCESS_USER_PROV_TYPE
-        alogs$ACCESS_USER_CLINICIAN_TITLE[alogs_row_index] = 
-          this_notes_alogs$ACCESS_USER_CLINICIAN_TITLE
-        alogs$ACCESS_USER_PROV_SPECIALTY[alogs_row_index] = 
-          this_notes_alogs$ACCESS_USER_PROV_SPECIALTY
-        alogs$ACCESS_USER_PROVIDER_GENDER[alogs_row_index] = 
-          this_notes_alogs$ACCESS_USER_PROVIDER_GENDER
-        # alogs$NOTE_AUTHOR_OBFUS_ID # I don't think we actually care about these.
-        # alogs$NOTE_AUTHOR_PROV_TYPE
-        # alogs$NOTE_AUTHOR_CLINICIAN_TITLE
-        # alogs$NOTE_AUTHOR_PROV_SPECIALTY
-        # alogs$NOTE_AUTHOR_PROVIDER_GENDER
-        
-        # Remove second modify.
-        alogs = 
-          alogs[-which(alogs$log_event_number == this_notes_alogs$log_event_number[1]),]
       }
       
     }#End: Handling med student authorships
     
     # Remove any med student views (authorships will already be 
-    #   overwritten by this point)
+    #   overwritten by this point, unless there were no other 
+    #   events associated with the student-authored note)
     alogs = 
       alogs |> 
       filter(ACCESS_USER_PROV_TYPE != "Medical Student")
