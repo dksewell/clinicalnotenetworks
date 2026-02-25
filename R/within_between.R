@@ -37,8 +37,6 @@
 #' @importFrom utils data
 #' @export
 
-
-
 within_between = function(id_pat,
                           db,
                           bp_path = "/Shared/ehr_networks/R01-SMART_cancer_care/patient_networks/ucsd/bipartite/",
@@ -202,7 +200,7 @@ within_between = function(id_pat,
   }
   
   ### 3. Within-team Information Reach: Number of note reads (excluding re-reading) 
-  #' from notes written by other team members
+  #      from notes written by other team members
   for(j in paste("within_reach",unique_mts,sep="_")){
     network_measures[[j]] = NA * numeric(nrow(network_measures))
   }

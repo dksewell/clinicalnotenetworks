@@ -5,22 +5,27 @@
 \title{Create network data for a patient}
 \usage{
 create_bp_network_data(
-  pat_id,
+  data_pat,
   db,
-  site = c("UCDavis", "UCSD", "UCLA")[1],
+  site = c("UCDavis", "UCSD", "UCLA")[2],
   include_med_students = FALSE,
   verbose = TRUE
 )
 }
 \arguments{
-\item{pat_id}{character giving the patient id}
-
 \item{db}{SQLite connection.}
 
 \item{site}{Which site should we pull data for?  Should be
 a character, namely one of "UCDavis", "UCSD", or "UCLA".}
 
+\item{include_med_students}{if FALSE, med students' events are not kept.}
+
 \item{verbose}{logical.}
+
+\item{pat_id}{character giving the patient id}
+
+\item{only_earliest_read}{If TRUE, duplicated Views (same note, same viewer)
+are removed and only the earliest is kept.}
 }
 \value{
 A \code{tidygraph} object.
@@ -52,7 +57,16 @@ UCDavis at least that this could be done faster by
 collecting all the access logs first.  However, for
 memory considerations I'm still doing the filtering on
 the patient ID on the SQLite database and then collecting.
-\item I have filtered out telephone encounters
+\item If the first entry in the data is a View, set the author to be
+the first Modify.  If no modify exists, use note author id.  The new
+modify row is set to be one year prior to the patient's first
+CANCER_DIAGNOSIS_DATE
+\item For Non-UCSD sites, change
+\itemize{
+\item med student prov type for sites other than UCSD!
+\item values to look for in this_notes_alogs$ACCESS_USER_PROV_TYPE
+and ACCESS_USER_CLINICIAN_TITLE for med student
+}
 \item Multiple author situations are handled as follows:
 \itemize{
 \item A new author leads to a change in the note ID going forward.

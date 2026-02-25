@@ -7,7 +7,7 @@
 clean_patient_data(patient_data)
 }
 \arguments{
-\item{patient_data}{Collected patient_data_\if{html}{\out{<site>}} from smart_cancer_care.db}
+\item{patient_data}{Collected patient_data_site from smart_cancer_care.db}
 }
 \description{
 Clean up cases in patient data with multiple rows.
