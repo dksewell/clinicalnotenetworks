@@ -19,6 +19,14 @@
 #' 8a. Missed opportunities: Number of potential note reads - actual note reads
 #' 8b. Missed opportunities: Number of completely unread notes
 #' 
+#' @param id_pat character PAT_OBFUS_ID
+#' @param db smart_cancer_care.db connection
+#' @param bp_path character path to objects from create_bp_network_data()
+#' @param site character
+#' @param lookback positive integer.  Number of weeks to look back prior to 
+#' study entry date
+#' @param date_start optional.  lubridate object
+#' @param date_end optional.  lubridate object
 #' 
 #' @import DBI
 #' @import RSQLite
@@ -35,6 +43,8 @@ within_between = function(id_pat,
                           db,
                           bp_path = "/Shared/ehr_networks/R01-SMART_cancer_care/patient_networks/ucsd/bipartite/",
                           site = "UCSD",
+                          lookback = 4,
+                          showProgress = TRUE,
                           date_start,
                           date_end){
   
@@ -57,7 +67,8 @@ within_between = function(id_pat,
     tbl(paste0("mts_lookup_",site)) |> 
     filter(PAT_OBFUS_ID == id_pat) |> 
     collect() |> 
-    filter(mts != "Exclude")
+    filter(mts != "Exclude",
+           mts != "Medical Student")
   
   
   ## Match MTS group to data_involvement
@@ -71,7 +82,8 @@ within_between = function(id_pat,
       by = "ACCESS_USER_OBFUS_ID"
     ) |> 
     drop_na() |> 
-    filter(mts != "Exclude") |>  # Just a check in case someone changes code above
+    filter(mts != "Exclude",
+           mts != "Medical Student") |>  # Just a check in case someone changes code above
     mutate(mts = paste(mts,setting,sep="_")) # Consider an mts group to be the combo of group and setting
   
   
@@ -118,7 +130,13 @@ within_between = function(id_pat,
     db |> 
     tbl(paste0("patient_data_",site)) |> 
     filter(PAT_OBFUS_ID == id_pat) |> 
-    collect()
+    collect() |> 
+    filter(CANCER_DIAGNOSIS_DATE == STUDY_ENTRY_DATE) |> 
+    filter(readr::parse_number(TNM_MIXED_STAGE) %in% 2:3) |> 
+    group_by(PAT_OBFUS_ID) |>
+    filter(row_number() == 1) |>
+    ungroup()
+  
   
   
   # Get date sequences
@@ -129,10 +147,10 @@ within_between = function(id_pat,
   }
   if(missing(date_end)){
     date_end = 
-      data_pat$RIGHT_CENSOR_DATE |> 
+      data_pat$RIGHT_CENSOR_DATE_LOGS |> 
       as_date()
   }
-  ## Lookback 4 weeks if possible
+  ## Assess maximum lookback period
   max_lookback =
     floor(
       as.integer(date_start - 
@@ -140,7 +158,7 @@ within_between = function(id_pat,
     )
   ## Create sequence of dates
   seq_week = 
-    (-min(max_lookback,4)):floor(as.integer(date_end - date_start) / 7)
+    (-min(max_lookback,lookback)):floor(as.integer(date_end - date_start) / 7)
   seq_startdates =
     date_start + weeks(seq_week)
     
@@ -236,6 +254,7 @@ within_between = function(id_pat,
   ## Store the teams which have appeared at least once
   applicable_teams_cum = NULL
   
+  if(showProgress) pb = txtProgressBar(0,nrow(network_measures),style=3)
   for(wk in 1:nrow(network_measures)){
     ## Create time interval
     week_interval = 
@@ -494,7 +513,7 @@ within_between = function(id_pat,
       
     }#End: cycling through each applicable team for this week
     
-    
+    if(showProgress) setTxtProgressBar(pb,wk)
   }#End: cycling through all weeks
   
   
