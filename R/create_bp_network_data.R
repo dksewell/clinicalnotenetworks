@@ -85,7 +85,7 @@ create_bp_network_data = function(data_pat,
     data_pat |> 
     mutate(
       LEFT_CENSOR_DATE = as_date(LEFT_CENSOR_DATE),
-      RIGHT_CENSOR_DATE = as_date(RIGHT_CENSOR_DATE),
+      RIGHT_CENSOR_DATE_LOGS = as_date(RIGHT_CENSOR_DATE_LOGS),
       STUDY_ENTRY_DATE = as_date(STUDY_ENTRY_DATE),
       CANCER_DIAGNOSIS_DATE = as_date(CANCER_DIAGNOSIS_DATE))
   
