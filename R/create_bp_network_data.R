@@ -75,16 +75,19 @@ create_bp_network_data = function(data_pat,
                                   include_med_students = FALSE,
                                   verbose = TRUE){
   
+  if(nrow(data_pat) > 1) stop("data_pat must have only one row")
+  
   #--------------------------------------
   # Get censoring dates for the given patient
   #--------------------------------------
   
   data_pat = 
     data_pat |> 
-    arrange(CANCER_DIAGNOSIS_DATE) |> 
-    mutate(CANCER_DIAGNOSIS_DATE = as_date(CANCER_DIAGNOSIS_DATE))
-  left_censor_date = 
-    data_pat$CANCER_DIAGNOSIS_DATE[1] - years(1)
+    mutate(
+      LEFT_CENSOR_DATE = as_date(LEFT_CENSOR_DATE),
+      RIGHT_CENSOR_DATE = as_date(RIGHT_CENSOR_DATE),
+      STUDY_ENTRY_DATE = as_date(STUDY_ENTRY_DATE),
+      CANCER_DIAGNOSIS_DATE = as_date(CANCER_DIAGNOSIS_DATE))
   
   
   #--------------------------------------
@@ -102,7 +105,7 @@ create_bp_network_data = function(data_pat,
     mutate(date_time = as_datetime(ACCESS_TIME)) |> # Convert access_time_char to date
     arrange(date_time) |>
     mutate(ACCESS_USER_OBFUS_ID = as.character(ACCESS_USER_OBFUS_ID), # This will help merge with note ids later.
-           log_event_number = 1:n()) |>  # This is to help with several operations later
+           log_event_number = row_number()) |>  # This is to help with several operations later
     select(date_time,
            log_event_number,
            PAT_OBFUS_ID,
