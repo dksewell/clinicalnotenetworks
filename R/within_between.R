@@ -57,7 +57,26 @@ within_between = function(id_pat,
     mutate(date_start = as_date(date_start),
            date_end = as_date(date_end)) |> 
     mutate(date_interval = interval(date_start,date_end))
-  
+  ### Check for duplicate entries
+  dup_ids = 
+    data_involvement$ACCESS_USER_OBFUS_ID[which(duplicated(data_involvement$ACCESS_USER_OBFUS_ID))]
+  if(length(dup_ids) > 0){
+    # if there are duplicates and someone has both an 
+    # inpatient and an outpatient, assume they are 
+    # outpatient.
+    data_involvement = 
+      data_involvement |> 
+      mutate(setting_factor = 
+               factor(setting,
+                      levels = c("outpatient",
+                                 "inpatient"),
+                      ordered = TRUE)) |> 
+      group_by(ACCESS_USER_OBFUS_ID) |> 
+      arrange(setting_factor) |> 
+      filter(row_number() == 1) |> 
+      ungroup() |> 
+      select(-setting_factor)
+  }
   
   ## Read in mts lookup table
   data_mts = 
@@ -81,6 +100,7 @@ within_between = function(id_pat,
     ) |> 
     drop_na() |> 
     filter(mts != "Exclude",
+           mts != "Scribe",
            mts != "Medical Student") |>  # Just a check in case someone changes code above
     mutate(mts = paste(mts,setting,sep="_")) # Consider an mts group to be the combo of group and setting
   
@@ -121,7 +141,8 @@ within_between = function(id_pat,
         rename(id_to = ACCESS_USER_OBFUS_ID,
                mts_to = mts),
       by = "id_to"
-    )
+    ) |> 
+    filter(!is.na(date_time))
   
   ## Read in patient data
   data_pat = 
@@ -296,7 +317,7 @@ within_between = function(id_pat,
       ### 2. Information production: Number of notes written by team members
       network_measures[[paste("within_production",j,sep="_")]][wk] = 
         data_edges |> 
-        filter(as_date(date_time) %in% week_interval,
+        filter(date_time %within% week_interval,
                mts_from == j) |> 
         pull(id_to) |> 
         unique() |> # Don't double count multiple modifies on the same note 
