@@ -201,7 +201,7 @@ create_bp_network_data = function(data_pat,
         alogs = 
           alogs |>
           add_row(
-            date_time = left_censor_date,
+            date_time = data_pat$LEFT_CENSOR_DATE,
             log_event_number = nrow(alogs) + i,
             PAT_OBFUS_ID = first_entry_is_view$PAT_OBFUS_ID[i],
             ACCESS_USER_OBFUS_ID = first_entry_is_view$ACCESS_USER_OBFUS_ID[i],
