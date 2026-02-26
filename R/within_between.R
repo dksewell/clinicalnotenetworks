@@ -394,19 +394,19 @@ within_between = function(id_pat,
         }#End: cycle through all writing events from team j
         
         ### Compute 3. w/in team reach
-        network_measures[[paste("within_reach",j,sep="_")]] = 
+        network_measures[[paste("within_reach",j,sep="_")]][wk] = 
           actual_reads
         ### Compute 4. w/in team share
-        network_measures[[paste("within_share",j,sep="_")]] = 
+        network_measures[[paste("within_share",j,sep="_")]][wk] = 
           actual_reads / 
           potential_reads
         ### Compute 5a. w/in team missed opportunities 
-        network_measures[[paste("within_missedoppsA",j,sep="_")]] = 
+        network_measures[[paste("within_missedoppsA",j,sep="_")]][wk] = 
           actual_reads - potential_reads
         
         
         ### Compute 5b. w/in team missed opportunities 
-        network_measures[[paste("within_missedoppsB",j,sep="_")]] = 
+        network_measures[[paste("within_missedoppsB",j,sep="_")]][wk] = 
           data_edges |> 
           #### Filter to only notes written by team j
           mutate(note_id = 
@@ -490,19 +490,19 @@ within_between = function(id_pat,
             }
             
             #### Compute 6. btwn team reach
-            network_measures[[paste("between_reach",j,sep="_")]] = 
+            network_measures[[paste("between_reach",j,sep="_")]][wk] = 
               actual_reads
             #### Compute 7. btwn team share
-            network_measures[[paste("between_share",j,sep="_")]] = 
+            network_measures[[paste("between_share",j,sep="_")]][wk] = 
               actual_reads / 
               potential_reads
             ### Compute 8a. w/in team missed opportunities 
-            network_measures[[paste("between_missedoppsA",j,sep="_")]] = 
+            network_measures[[paste("between_missedoppsA",j,sep="_")]][wk] = 
               actual_reads - potential_reads
             
             
             ### Compute 8b. w/in team missed opportunities 
-            network_measures[[paste("between_missedoppsB",j,sep="_")]] = 
+            network_measures[[paste("between_missedoppsB",j,sep="_")]][wk] = 
               data_edges |> 
               #### Filter to only notes written by team j
               mutate(note_id = 
