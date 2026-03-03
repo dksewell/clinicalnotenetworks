@@ -65,10 +65,9 @@ within_between_no_setting = function(id_pat,
     tbl(paste0("mts_lookup_",site)) |> 
     filter(PAT_OBFUS_ID == id_pat) |> 
     collect() |> 
-    drop_na()#|> 
-    # filter(mts != "Exclude",
-    #        mts != "Medical Student",
-    #        mts != "Scribe")
+    filter(mts != "Exclude",
+           mts != "Medical Student",
+           mts != "Scribe")
   
   
   ## Match MTS group to data_involvement
